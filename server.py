@@ -19,10 +19,11 @@
 #             )
 #         """)
 #         await db.commit()
+#     print("Database initialized successfully.")
 
 # # --- 2. Health Check (Fixes Render Shutdowns) ---
-# @mcp.custom_route("/", methods=["GET"])
-# async def health_check(request):
+# @mcp.external_app.get("/")
+# async def health_check():
 #     """Tell Render and Postman that the server is healthy."""
 #     return JSONResponse({
 #         "status": "healthy",
@@ -58,12 +59,20 @@
 #             rows = await cursor.fetchall()
 #             return [row[0] for row in rows]
 
-# # --- 4. Main Entry Point ---
+# # --- 4. Main Entry Point (Optimized for Render) ---
+# async def main():
+#     # Initialize database
+#     await init_db()
+    
+#     # Get port from environment for Render
+#     port = int(os.environ.get("PORT", 10000))
+    
+#     # Run the server using the async method to keep the loop alive
+#     print(f"Starting MCP server on port {port}...")
+#     await mcp.run_async(transport="sse", host="0.0.0.0", port=port)
+
 # if __name__ == "__main__":
-#     # Create DB then start server
-#     asyncio.run(init_db())
-#     # Use 'sse' transport for Render/Postman compatibility
-#     mcp.run(transport="sse")
+#     asyncio.run(main())
 
 
 
