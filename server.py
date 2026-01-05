@@ -162,7 +162,7 @@ async def main():
     print(f"Starting MCP server on port {port}...")
     
     # message_path="/sse/mcp" matches the path your workflow is hitting (fixing the 404)
-    mcp.run(transport="sse", host="0.0.0.0", port=port, message_path="/sse/mcp")
+    mcp.run(transport="sse", host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
     asyncio.run(main())
