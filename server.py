@@ -21,9 +21,10 @@
 #         await db.commit()
 #     print("Database initialized successfully.")
 
-# # --- 2. Health Check (Fixes Render Shutdowns) ---
-# @mcp.external_app.get("/")
-# async def health_check():
+# # --- 2. Health Check (Corrected Decorator) ---
+# # This replaces @mcp.external_app.get("/")
+# @mcp.custom_route("/", methods=["GET"])
+# async def health_check(request):
 #     """Tell Render and Postman that the server is healthy."""
 #     return JSONResponse({
 #         "status": "healthy",
@@ -59,24 +60,19 @@
 #             rows = await cursor.fetchall()
 #             return [row[0] for row in rows]
 
-# # --- 4. Main Entry Point (Optimized for Render) ---
+# # --- 4. Main Entry Point ---
 # async def main():
-#     # Initialize database
 #     await init_db()
     
-#     # Get port from environment for Render
+#     # Render provides the PORT environment variable
 #     port = int(os.environ.get("PORT", 10000))
     
-#     # Run the server using the async method to keep the loop alive
 #     print(f"Starting MCP server on port {port}...")
-#     await mcp.run_async(transport="sse", host="0.0.0.0", port=port)
+#     # Use mcp.run() with sse transport - it's compatible with Render
+#     mcp.run(transport="sse", host="0.0.0.0", port=port)
 
 # if __name__ == "__main__":
 #     asyncio.run(main())
-
-
-
-
 
 
 
@@ -105,55 +101,68 @@ async def init_db():
         await db.commit()
     print("Database initialized successfully.")
 
-# --- 2. Health Check (Corrected Decorator) ---
-# This replaces @mcp.external_app.get("/")
+# --- 2. Health Check ---
 @mcp.custom_route("/", methods=["GET"])
 async def health_check(request):
-    """Tell Render and Postman that the server is healthy."""
+    """Wake-up endpoint for Render."""
     return JSONResponse({
         "status": "healthy",
-        "mcp_endpoints": ["/sse", "/messages"],
-        "message": "Note Taker Pro MCP is running!"
+        "mcp_endpoints": ["/sse", "/sse/mcp"],
+        "message": "Note Taker Pro MCP is active!"
     })
 
-# --- 3. MCP Tools ---
+# --- 3. MCP Tools (Standardized JSON Outputs) ---
+
 @mcp.tool()
-async def create_note(title: str, content: str) -> str:
+async def create_note(title: str, content: str) -> dict:
     """Create a new persistent note."""
     try:
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("INSERT INTO notes (title, content) VALUES (?, ?)", (title, content))
             await db.commit()
-        return f"Note '{title}' saved successfully."
+        return {"status": f"Note '{title}' saved successfully."}
     except Exception as e:
-        return f"Error: {str(e)}"
+        return {"status": f"Error: {str(e)}"}
 
 @mcp.tool()
-async def get_note(title: str) -> str:
+async def get_note(title: str) -> dict:
     """Retrieve a note by its title."""
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT content FROM notes WHERE title = ?", (title,)) as cursor:
             row = await cursor.fetchone()
-            return row[0] if row else "Note not found."
+            if row:
+                return {"content": row[0]}
+            return {"content": "Note not found."}
 
 @mcp.tool()
-async def list_notes() -> list[str]:
-    """List all saved note titles."""
+async def list_notes(filter_text: str = "") -> dict:
+    """
+    List all saved note titles. 
+    Input 'filter_text' (optional) to search for specific notes.
+    """
     async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT title FROM notes") as cursor:
+        if filter_text:
+            query = "SELECT title FROM notes WHERE title LIKE ?"
+            params = (f"%{filter_text}%",)
+        else:
+            query = "SELECT title FROM notes"
+            params = ()
+            
+        async with db.execute(query, params) as cursor:
             rows = await cursor.fetchall()
-            return [row[0] for row in rows]
+            return {"notes": [row[0] for row in rows]}
 
-# --- 4. Main Entry Point ---
+# --- 4. Main Entry Point (Workflow Alignment) ---
 async def main():
     await init_db()
     
-    # Render provides the PORT environment variable
+    # Port provided by Render
     port = int(os.environ.get("PORT", 10000))
     
     print(f"Starting MCP server on port {port}...")
-    # Use mcp.run() with sse transport - it's compatible with Render
-    mcp.run(transport="sse", host="0.0.0.0", port=port)
+    
+    # message_path="/sse/mcp" matches the path your workflow is hitting (fixing the 404)
+    mcp.run(transport="sse", host="0.0.0.0", port=port, message_path="/sse/mcp")
 
 if __name__ == "__main__":
     asyncio.run(main())
